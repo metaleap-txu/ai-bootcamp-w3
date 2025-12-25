@@ -1,0 +1,851 @@
+openapi: 3.1.0
+info:
+  title: Database Query Tool API
+  version: 1.0.0
+  description: |
+    FastAPI backend for database query tool. Provides endpoints for managing PostgreSQL connections,
+    browsing metadata, executing SELECT queries, and exporting results.
+    
+    **Security**: All queries are validated via sqlglot. Only SELECT statements allowed.
+    Auto-applies LIMIT 1000 if not specified.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+tags:
+  - name: connections
+    description: Manage PostgreSQL database connections
+  - name: metadata
+    description: Browse database schemas, tables, and columns
+  - name: queries
+    description: Execute SQL queries and view results
+  - name: nl2sql
+    description: Convert natural language to SQL
+  - name: exports
+    description: Export query results to various formats
+  - name: health
+    description: Health check endpoints
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Health check
+      operationId: health_check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  version:
+                    type: string
+                    example: "1.0.0"
+
+  /api/connections:
+    get:
+      tags: [connections]
+      summary: List all connections
+      operationId: list_connections
+      parameters:
+        - name: active_only
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Filter to only active connections
+      responses:
+        '200':
+          description: List of connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Connection'
+
+    post:
+      tags: [connections]
+      summary: Create new connection
+      operationId: create_connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionCreate'
+      responses:
+        '201':
+          description: Connection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/connections/{connection_id}:
+    get:
+      tags: [connections]
+      summary: Get connection by ID
+      operationId: get_connection
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      responses:
+        '200':
+          description: Connection details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags: [connections]
+      summary: Update connection
+      operationId: update_connection
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionUpdate'
+      responses:
+        '200':
+          description: Connection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [connections]
+      summary: Delete connection
+      operationId: delete_connection
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      responses:
+        '204':
+          description: Connection deleted
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/connections/{connection_id}/test:
+    post:
+      tags: [connections]
+      summary: Test database connection
+      operationId: test_connection
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      responses:
+        '200':
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTestResult'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/metadata/{connection_id}/schemas:
+    get:
+      tags: [metadata]
+      summary: List schemas for a connection
+      operationId: list_schemas
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+        - name: use_cache
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Use cached metadata if available
+      responses:
+        '200':
+          description: List of schemas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemas:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Schema'
+                  cached:
+                    type: boolean
+                    description: Whether data was from cache
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/metadata/{connection_id}/schemas/{schema_name}/tables:
+    get:
+      tags: [metadata]
+      summary: List tables in a schema
+      operationId: list_tables
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+        - name: schema_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: use_cache
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: List of tables
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schema:
+                    type: string
+                  tables:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Table'
+                  cached:
+                    type: boolean
+
+  /api/metadata/{connection_id}/schemas/{schema_name}/tables/{table_name}/columns:
+    get:
+      tags: [metadata]
+      summary: List columns in a table
+      operationId: list_columns
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+        - name: schema_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: table_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: use_cache
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Table column details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableDetails'
+
+  /api/metadata/{connection_id}/refresh:
+    post:
+      tags: [metadata]
+      summary: Invalidate metadata cache
+      operationId: refresh_metadata
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      responses:
+        '204':
+          description: Cache invalidated
+
+  /api/queries/execute:
+    post:
+      tags: [queries]
+      summary: Execute SQL query
+      operationId: execute_query
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryExecute'
+      responses:
+        '200':
+          description: Query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResult'
+        '400':
+          description: Invalid SQL or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Query execution error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/queries/validate:
+    post:
+      tags: [queries]
+      summary: Validate SQL without executing
+      operationId: validate_query
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sql]
+              properties:
+                sql:
+                  type: string
+                  description: SQL query to validate
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+
+  /api/queries/history/{connection_id}:
+    get:
+      tags: [queries]
+      summary: Get query history for connection
+      operationId: get_query_history
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: Query history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryHistoryItem'
+
+  /api/nl2sql:
+    post:
+      tags: [nl2sql]
+      summary: Convert natural language to SQL
+      operationId: nl_to_sql
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NL2SQLRequest'
+      responses:
+        '200':
+          description: Generated SQL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NL2SQLResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: OpenAI API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/exports/csv:
+    post:
+      tags: [exports]
+      summary: Export query results as CSV
+      operationId: export_csv
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="query_results.csv"
+
+  /api/exports/json:
+    post:
+      tags: [exports]
+      summary: Export query results as JSON
+      operationId: export_json
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: JSON file
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="query_results.json"
+
+  /api/exports/excel:
+    post:
+      tags: [exports]
+      summary: Export query results as Excel
+      operationId: export_excel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: Excel file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="query_results.xlsx"
+
+components:
+  parameters:
+    ConnectionId:
+      name: connection_id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Connection ID
+
+  schemas:
+    Connection:
+      type: object
+      required: [id, name, host, port, database, username, created_at, is_active]
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          maxLength: 100
+          example: "Production DB"
+        host:
+          type: string
+          example: "localhost"
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          example: 5432
+        database:
+          type: string
+          maxLength: 100
+          example: "myapp_prod"
+        username:
+          type: string
+          maxLength: 100
+          example: "dbuser"
+        ssl_mode:
+          type: string
+          nullable: true
+          enum: [disable, allow, prefer, require, verify-ca, verify-full]
+          example: "prefer"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-12-25T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-12-25T10:30:00Z"
+        last_tested_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-12-25T11:00:00Z"
+        is_active:
+          type: boolean
+          example: true
+
+    ConnectionCreate:
+      type: object
+      required: [name, host, port, database, username, password]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        host:
+          type: string
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        database:
+          type: string
+          maxLength: 100
+        username:
+          type: string
+          maxLength: 100
+        password:
+          type: string
+          description: Plain password (will be encrypted)
+        ssl_mode:
+          type: string
+          nullable: true
+          enum: [disable, allow, prefer, require, verify-ca, verify-full]
+
+    ConnectionUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        host:
+          type: string
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        database:
+          type: string
+          maxLength: 100
+        username:
+          type: string
+          maxLength: 100
+        password:
+          type: string
+          description: Plain password (will be encrypted)
+        ssl_mode:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+
+    ConnectionTestResult:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Connection successful"
+        latency_ms:
+          type: integer
+          description: Connection latency in milliseconds
+          example: 45
+        server_version:
+          type: string
+          nullable: true
+          example: "PostgreSQL 15.3"
+        error:
+          type: string
+          nullable: true
+          description: Error message if success is false
+
+    Schema:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: "public"
+        owner:
+          type: string
+          nullable: true
+          example: "postgres"
+
+    Table:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: "users"
+        row_count:
+          type: integer
+          nullable: true
+          example: 1234
+        size_bytes:
+          type: integer
+          nullable: true
+          example: 524288
+
+    Column:
+      type: object
+      required: [name, type, nullable]
+      properties:
+        name:
+          type: string
+          example: "id"
+        type:
+          type: string
+          example: "integer"
+        nullable:
+          type: boolean
+          example: false
+        default:
+          type: string
+          nullable: true
+          example: "nextval('users_id_seq')"
+
+    TableDetails:
+      type: object
+      required: [schema, table, columns]
+      properties:
+        schema:
+          type: string
+          example: "public"
+        table:
+          type: string
+          example: "users"
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/Column'
+        primary_keys:
+          type: array
+          items:
+            type: string
+          example: ["id"]
+        foreign_keys:
+          type: array
+          items:
+            type: object
+            properties:
+              column:
+                type: string
+              references_table:
+                type: string
+              references_column:
+                type: string
+
+    QueryExecute:
+      type: object
+      required: [connection_id, sql]
+      properties:
+        connection_id:
+          type: integer
+          example: 1
+        sql:
+          type: string
+          description: SQL query (SELECT only)
+          example: "SELECT * FROM users WHERE created_at > '2025-01-01'"
+
+    QueryResult:
+      type: object
+      required: [columns, rows, row_count, execution_time_ms]
+      properties:
+        columns:
+          type: array
+          items:
+            type: object
+            required: [name, type, nullable]
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+              nullable:
+                type: boolean
+              python_type:
+                type: string
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        row_count:
+          type: integer
+          example: 42
+        execution_time_ms:
+          type: integer
+          example: 145
+        has_more:
+          type: boolean
+          description: Whether more rows exist beyond LIMIT
+          example: false
+        transformed_sql:
+          type: string
+          description: SQL after transformation (with LIMIT)
+
+    ValidationResult:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+          example: true
+        transformed_sql:
+          type: string
+          nullable: true
+          description: SQL after transformation (with LIMIT)
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              message:
+                type: string
+              line:
+                type: integer
+              column:
+                type: integer
+
+    QueryHistoryItem:
+      type: object
+      required: [id, sql_query, executed_at, status]
+      properties:
+        id:
+          type: integer
+          example: 1
+        sql_query:
+          type: string
+        transformed_sql:
+          type: string
+        executed_at:
+          type: string
+          format: date-time
+        execution_time_ms:
+          type: integer
+          nullable: true
+        row_count:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [SUCCESS, ERROR, CANCELLED]
+        error_message:
+          type: string
+          nullable: true
+
+    NL2SQLRequest:
+      type: object
+      required: [connection_id, natural_language]
+      properties:
+        connection_id:
+          type: integer
+          description: Connection to use for schema context
+          example: 1
+        natural_language:
+          type: string
+          description: Natural language query
+          example: "show all users created in the last 7 days"
+        schema_name:
+          type: string
+          nullable: true
+          description: Specific schema to use for context
+
+    NL2SQLResponse:
+      type: object
+      required: [sql, confidence]
+      properties:
+        sql:
+          type: string
+          description: Generated SQL query
+          example: "SELECT * FROM users WHERE created_at > NOW() - INTERVAL '7 days'"
+        confidence:
+          type: string
+          enum: [high, medium, low]
+          description: Confidence level of generation
+        explanation:
+          type: string
+          nullable: true
+          description: Human-readable explanation of the query
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Warnings about ambiguities or assumptions
+
+    ExportRequest:
+      type: object
+      required: [connection_id, sql]
+      properties:
+        connection_id:
+          type: integer
+        sql:
+          type: string
+          description: SQL query to execute and export
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: "ValidationError"
+        message:
+          type: string
+          example: "Only SELECT statements are allowed"
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true

@@ -1,0 +1,501 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Database Query Tool - Pydantic Schema Definitions",
+  "description": "JSON Schema definitions for Pydantic models used in FastAPI backend",
+  "definitions": {
+    "ConnectionBase": {
+      "type": "object",
+      "required": ["name", "host", "port", "database", "username"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "description": "User-friendly connection name"
+        },
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "description": "PostgreSQL server hostname or IP"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 5432,
+          "description": "PostgreSQL server port"
+        },
+        "database": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "description": "Database name"
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "description": "Database username"
+        },
+        "ssl_mode": {
+          "type": "string",
+          "enum": ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"],
+          "default": "prefer",
+          "description": "SSL connection mode"
+        }
+      }
+    },
+    "ConnectionCreate": {
+      "allOf": [
+        {"$ref": "#/definitions/ConnectionBase"},
+        {
+          "type": "object",
+          "required": ["password"],
+          "properties": {
+            "password": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Plain password (will be encrypted before storage)"
+            }
+          }
+        }
+      ]
+    },
+    "ConnectionUpdate": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1
+        },
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "database": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ssl_mode": {
+          "type": "string",
+          "enum": ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"]
+        },
+        "is_active": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ConnectionResponse": {
+      "allOf": [
+        {"$ref": "#/definitions/ConnectionBase"},
+        {
+          "type": "object",
+          "required": ["id", "created_at", "updated_at", "is_active"],
+          "properties": {
+            "id": {
+              "type": "integer",
+              "description": "Unique connection identifier"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp when connection was created"
+            },
+            "updated_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp when connection was last modified"
+            },
+            "last_tested_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Last successful connection test timestamp"
+            },
+            "is_active": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether connection is enabled"
+            }
+          }
+        }
+      ]
+    },
+    "ConnectionTestResult": {
+      "type": "object",
+      "required": ["success", "message"],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "Whether connection test succeeded"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable test result message"
+        },
+        "latency_ms": {
+          "type": ["integer", "null"],
+          "description": "Connection latency in milliseconds"
+        },
+        "server_version": {
+          "type": ["string", "null"],
+          "description": "PostgreSQL server version string"
+        },
+        "error": {
+          "type": ["string", "null"],
+          "description": "Error message if success is false"
+        }
+      }
+    },
+    "Schema": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Schema name"
+        },
+        "owner": {
+          "type": ["string", "null"],
+          "description": "Schema owner username"
+        }
+      }
+    },
+    "Table": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Table name"
+        },
+        "row_count": {
+          "type": ["integer", "null"],
+          "description": "Approximate row count"
+        },
+        "size_bytes": {
+          "type": ["integer", "null"],
+          "description": "Table size in bytes"
+        }
+      }
+    },
+    "Column": {
+      "type": "object",
+      "required": ["name", "type", "nullable"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Column name"
+        },
+        "type": {
+          "type": "string",
+          "description": "PostgreSQL data type"
+        },
+        "nullable": {
+          "type": "boolean",
+          "description": "Whether column allows NULL"
+        },
+        "default": {
+          "type": ["string", "null"],
+          "description": "Default value expression"
+        }
+      }
+    },
+    "ForeignKey": {
+      "type": "object",
+      "required": ["column", "references_table", "references_column"],
+      "properties": {
+        "column": {
+          "type": "string",
+          "description": "Foreign key column name"
+        },
+        "references_table": {
+          "type": "string",
+          "description": "Referenced table name"
+        },
+        "references_column": {
+          "type": "string",
+          "description": "Referenced column name"
+        }
+      }
+    },
+    "TableDetails": {
+      "type": "object",
+      "required": ["schema", "table", "columns"],
+      "properties": {
+        "schema": {
+          "type": "string",
+          "description": "Schema name"
+        },
+        "table": {
+          "type": "string",
+          "description": "Table name"
+        },
+        "columns": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/Column"},
+          "description": "Table columns"
+        },
+        "primary_keys": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": [],
+          "description": "Primary key column names"
+        },
+        "foreign_keys": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/ForeignKey"},
+          "default": [],
+          "description": "Foreign key constraints"
+        }
+      }
+    },
+    "QueryExecute": {
+      "type": "object",
+      "required": ["connection_id", "sql"],
+      "properties": {
+        "connection_id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Connection ID to execute query on"
+        },
+        "sql": {
+          "type": "string",
+          "minLength": 1,
+          "description": "SQL query (SELECT only)"
+        }
+      }
+    },
+    "ColumnMetadata": {
+      "type": "object",
+      "required": ["name", "type", "nullable"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Column name"
+        },
+        "type": {
+          "type": "string",
+          "description": "PostgreSQL data type"
+        },
+        "nullable": {
+          "type": "boolean",
+          "description": "Whether column allows NULL"
+        },
+        "python_type": {
+          "type": "string",
+          "description": "Python type (int, str, datetime, etc.)"
+        }
+      }
+    },
+    "QueryResult": {
+      "type": "object",
+      "required": ["columns", "rows", "row_count", "execution_time_ms", "has_more"],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/ColumnMetadata"},
+          "description": "Column definitions"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "description": "Query result rows (array of objects)"
+        },
+        "row_count": {
+          "type": "integer",
+          "description": "Number of rows returned"
+        },
+        "execution_time_ms": {
+          "type": "integer",
+          "description": "Query execution time in milliseconds"
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "Whether more rows exist beyond LIMIT"
+        },
+        "transformed_sql": {
+          "type": "string",
+          "description": "SQL after transformation (with LIMIT)"
+        }
+      }
+    },
+    "ValidationError": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Error message"
+        },
+        "line": {
+          "type": ["integer", "null"],
+          "description": "Line number where error occurred"
+        },
+        "column": {
+          "type": ["integer", "null"],
+          "description": "Column number where error occurred"
+        }
+      }
+    },
+    "ValidationResult": {
+      "type": "object",
+      "required": ["valid"],
+      "properties": {
+        "valid": {
+          "type": "boolean",
+          "description": "Whether SQL is valid"
+        },
+        "transformed_sql": {
+          "type": ["string", "null"],
+          "description": "SQL after transformation (with LIMIT)"
+        },
+        "errors": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/ValidationError"},
+          "default": [],
+          "description": "Validation errors (if any)"
+        }
+      }
+    },
+    "QueryHistoryItem": {
+      "type": "object",
+      "required": ["id", "sql_query", "transformed_sql", "executed_at", "status"],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "description": "Unique query history identifier"
+        },
+        "sql_query": {
+          "type": "string",
+          "description": "Original SQL query text"
+        },
+        "transformed_sql": {
+          "type": "string",
+          "description": "SQL after sqlglot transformation"
+        },
+        "executed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when query was executed"
+        },
+        "execution_time_ms": {
+          "type": ["integer", "null"],
+          "description": "Query execution time in milliseconds"
+        },
+        "row_count": {
+          "type": ["integer", "null"],
+          "description": "Number of rows returned"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["SUCCESS", "ERROR", "CANCELLED"],
+          "description": "Execution status"
+        },
+        "error_message": {
+          "type": ["string", "null"],
+          "description": "Error details if status is ERROR"
+        }
+      }
+    },
+    "NL2SQLRequest": {
+      "type": "object",
+      "required": ["connection_id", "natural_language"],
+      "properties": {
+        "connection_id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Connection to use for schema context"
+        },
+        "natural_language": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Natural language query"
+        },
+        "schema_name": {
+          "type": ["string", "null"],
+          "description": "Specific schema to use for context"
+        }
+      }
+    },
+    "NL2SQLResponse": {
+      "type": "object",
+      "required": ["sql", "confidence"],
+      "properties": {
+        "sql": {
+          "type": "string",
+          "description": "Generated SQL query"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "Confidence level of generation"
+        },
+        "explanation": {
+          "type": ["string", "null"],
+          "description": "Human-readable explanation of the query"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": [],
+          "description": "Warnings about ambiguities or assumptions"
+        }
+      }
+    },
+    "ExportRequest": {
+      "type": "object",
+      "required": ["connection_id", "sql"],
+      "properties": {
+        "connection_id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Connection ID to execute query on"
+        },
+        "sql": {
+          "type": "string",
+          "minLength": 1,
+          "description": "SQL query to execute and export"
+        }
+      }
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "required": ["error", "message"],
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Error type/category"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message"
+        },
+        "details": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "description": "Additional error details"
+        }
+      }
+    }
+  }
+}
