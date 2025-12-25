@@ -292,7 +292,7 @@ export const MetadataTree: React.FC<MetadataTreeProps> = ({
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '48px' }}>
-          <Spin tip="Loading schemas..." />
+          <Spin tip="Loading schemas..." size="large" />
         </div>
       ) : (
         <Tree
