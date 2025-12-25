@@ -1,0 +1,100 @@
+services:
+  # Database Service (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: db-query-tool-db
+    restart: unless-stopped
+    
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dbquery
+    
+    ports:
+      - "5432:5432"
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    networks:
+      - app-network
+
+  # Backend Service (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    
+    container_name: db-query-tool-backend
+    restart: unless-stopped
+    
+    depends_on:
+      db:
+        condition: service_healthy
+    
+    environment:
+      - DEBUG=true
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=dbquery
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    
+    ports:
+      - "8000:8000"
+    
+    volumes:
+      - ./backend/src:/app/src
+      - ~/.db_query:/root/.db_query
+      - ./backend/alembic:/app/alembic:ro
+      - ./backend/alembic.ini:/app/alembic.ini:ro
+    
+    networks:
+      - app-network
+
+  # Frontend Service (React + Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    
+    container_name: db-query-tool-frontend
+    restart: unless-stopped
+    
+    # No VITE_API_URL needed - frontend uses /api which is proxied by vite.config.ts
+    
+    ports:
+      - "5173:5173"
+    
+    volumes:
+      - ./frontend/src:/app/src
+      - frontend_node_modules:/app/node_modules
+      - ./frontend/vite.config.ts:/app/vite.config.ts:ro
+      - ./frontend/tsconfig.json:/app/tsconfig.json:ro
+      - ./frontend/tsconfig.node.json:/app/tsconfig.node.json:ro
+      - ./frontend/postcss.config.js:/app/postcss.config.js:ro
+      - ./frontend/index.html:/app/index.html:ro
+    
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  
+  frontend_node_modules:
+    driver: local

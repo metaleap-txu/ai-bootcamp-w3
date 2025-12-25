@@ -12,6 +12,115 @@ A full-featured PostgreSQL query tool with natural language support, built with 
 
 ## Prerequisites
 
+- **Docker**: 24.0 or higher (with Docker Compose V2)
+- **Docker Desktop**: Recommended for macOS and Windows
+- **OpenAI API Key**: Required for Natural Language to SQL feature (optional for other features)
+
+**OR** for local development without Docker:
+
+- **Python**: 3.12 or higher
+- **Node.js**: 18.0 or higher
+- **PostgreSQL**: Access to one or more PostgreSQL databases (version 12+)
+
+## Quick Start with Docker (Recommended)
+
+The easiest way to get started is using Docker Compose:
+
+```bash
+# 1. Clone the repository
+git clone <repository-url>
+cd ai-bootcamp-w3
+
+# 2. Create environment file with your OpenAI API key
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+
+# 3. Start all services (database, backend, frontend)
+docker compose up -d
+
+# 4. Access the application
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8000
+# API Docs: http://localhost:8000/docs
+```
+
+That's it! The application is now running with hot-reload enabled for development.
+
+### Docker Development Workflow
+
+**Start services:**
+```bash
+docker compose up -d
+```
+
+**View logs:**
+```bash
+docker compose logs -f              # All services
+docker compose logs -f backend      # Backend only
+docker compose logs -f frontend     # Frontend only
+```
+
+**Stop services:**
+```bash
+docker compose down                 # Stop and remove containers
+docker compose down -v              # Also remove volumes (fresh start)
+```
+
+**Rebuild images (when dependencies change):**
+```bash
+./scripts/rebuild.sh                # Rebuild all images
+./scripts/rebuild.sh backend        # Rebuild backend only
+./scripts/rebuild.sh frontend       # Frontend only
+```
+
+### Docker Services
+
+The `docker-compose.yml` defines three services:
+
+1. **db** - PostgreSQL 15 database for connection metadata
+2. **backend** - FastAPI application (Python 3.12)
+3. **frontend** - Vite dev server (Node 20)
+
+All services include:
+- Hot-reload for code changes (backend uvicorn --reload, frontend Vite HMR)
+- Volume mounts for source code
+- Health checks and dependency ordering
+- Automatic restart policies
+
+### Docker Troubleshooting
+
+**Port conflicts:**
+```bash
+# Check what's using port 5432, 8000, or 5173
+lsof -ti:5432  # PostgreSQL
+lsof -ti:8000  # Backend
+lsof -ti:5173  # Frontend
+
+# Kill conflicting process (macOS/Linux)
+lsof -ti:5432 | xargs kill -9
+```
+
+**Docker daemon not running:**
+```bash
+# macOS
+open -a Docker
+
+# Linux
+sudo systemctl start docker
+
+# Windows
+# Start Docker Desktop from Start Menu
+```
+
+**Reset everything:**
+```bash
+docker compose down -v              # Remove all containers and volumes
+docker system prune -af             # Clean up Docker system
+docker compose up -d                # Fresh start
+```
+
+## Prerequisites
+
 - **Python**: 3.12 or higher
 - **Node.js**: 18.0 or higher
 - **PostgreSQL**: Access to one or more PostgreSQL databases (version 12+)

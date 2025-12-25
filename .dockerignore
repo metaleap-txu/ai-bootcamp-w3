@@ -1,0 +1,67 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+specs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Dependencies (will be installed in container)
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Frontend specific
+.cache/
+.parcel-cache/
+.next/
+out/
+
+# Database files (managed via volumes)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# CI/CD
+.github/
+.specify/
