@@ -66,5 +66,5 @@ from src.api import connections, queries, metadata, exports, nl2sql
 app.include_router(connections.router, prefix="/api/connections", tags=["Connections"])
 app.include_router(queries.router, prefix="/api/queries", tags=["Queries"])
 app.include_router(metadata.router, prefix="/api/metadata", tags=["Metadata"])
-app.include_router(exports.router, prefix="/api/exports", tags=["Exports"])
+app.include_router(exports.router, tags=["Exports"])
 app.include_router(nl2sql.router, prefix="/api/nl2sql", tags=["NL2SQL"])
