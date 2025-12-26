@@ -26,6 +26,7 @@ import { useNavigate } from 'react-router-dom';
 import { SqlEditor } from '../components/SqlEditor';
 import { QueryResults } from '../components/QueryResults';
 import { MetadataTree } from '../components/MetadataTree';
+import { ExportMenu } from '../components/ExportMenu';
 import { connectionService } from '../services/connectionService';
 import { queryService } from '../services/queryService';
 import { nl2sqlService } from '../services/nl2sqlService';
@@ -369,6 +370,11 @@ export const QueryPage: React.FC = () => {
         </Card>
 
         <Card title="Query Results">
+          {result && result.rows.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <ExportMenu result={result} filename="query_results" />
+            </div>
+          )}
           <QueryResults result={result} loading={executing} />
         </Card>
       </Content>

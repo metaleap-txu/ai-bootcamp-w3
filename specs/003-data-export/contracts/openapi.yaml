@@ -1,0 +1,524 @@
+openapi: 3.0.3
+info:
+  title: Data Export API
+  description: API endpoints for exporting query results in CSV and JSON formats
+  version: 1.0.0
+  contact:
+    name: DB Query Tool Team
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /api/exports/csv:
+    post:
+      summary: Export query results as CSV
+      description: |
+        Generate and download query results in CSV format (RFC 4180 compliant).
+        For large datasets (>10K rows), returns streaming response with progress updates.
+      operationId: exportCsv
+      tags:
+        - Exports
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+            examples:
+              fromQueryHistory:
+                summary: Export from query history
+                value:
+                  query_history_id: 42
+                  format: csv
+                  options:
+                    include_bom: true
+                    include_metadata: false
+              fromInMemoryResult:
+                summary: Export in-memory query result
+                value:
+                  query_result:
+                    columns: ["id", "email", "created_at"]
+                    rows:
+                      - {"id": 1, "email": "alice@example.com", "created_at": "2025-12-01T10:30:00"}
+                      - {"id": 2, "email": "bob@example.com", "created_at": "2025-12-02T14:15:00"}
+                  format: csv
+                  filename: user_export
+      responses:
+        '200':
+          description: Export generated successfully (small dataset - direct download)
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="query_results_20251225_143022.csv"
+            Content-Type:
+              schema:
+                type: string
+                example: text/csv; charset=utf-8
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '202':
+          description: Export initiated (large dataset - streaming via SSE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponseStreaming'
+        '400':
+          description: Invalid request (missing required fields, invalid format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingData:
+                  value:
+                    error: "Must provide either query_history_id or query_result"
+                invalidFormat:
+                  value:
+                    error: "Invalid format: must be 'csv' or 'json'"
+        '404':
+          description: Query history not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Export generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/exports/json:
+    post:
+      summary: Export query results as JSON
+      description: |
+        Generate and download query results in JSON format.
+        For large datasets (>10K rows), returns streaming response with progress updates.
+      operationId: exportJson
+      tags:
+        - Exports
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+            examples:
+              prettyJson:
+                summary: Pretty-printed JSON export
+                value:
+                  query_history_id: 42
+                  format: json
+                  options:
+                    pretty: true
+                    include_metadata: true
+      responses:
+        '200':
+          description: Export generated successfully (small dataset - direct download)
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="query_results_20251225_143022.json"
+            Content-Type:
+              schema:
+                type: string
+                example: application/json; charset=utf-8
+          content:
+            application/json:
+              schema:
+                type: object
+        '202':
+          description: Export initiated (large dataset - streaming via SSE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponseStreaming'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Query history not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Export generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/exports/stream/{export_id}:
+    get:
+      summary: Stream large export with progress updates
+      description: |
+        Server-Sent Events (SSE) endpoint for streaming large exports.
+        Sends progress updates during generation and final download URL when complete.
+      operationId: streamExport
+      tags:
+        - Exports
+      parameters:
+        - name: export_id
+          in: path
+          required: true
+          description: Unique export operation identifier
+          schema:
+            type: string
+            example: "abc123def456"
+      responses:
+        '200':
+          description: SSE stream of export progress
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  data: {"progress": 25.5, "processed": 25500, "total": 100000, "status": "in_progress"}
+                  
+                  data: {"progress": 50.0, "processed": 50000, "total": 100000, "status": "in_progress"}
+                  
+                  data: {"progress": 100.0, "processed": 100000, "total": 100000, "status": "complete", "download_url": "/api/exports/download/abc123"}
+        '404':
+          description: Export operation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/exports/download/{file_id}:
+    get:
+      summary: Download completed export file
+      description: |
+        Download a generated export file. Files are temporary and expire after 1 hour.
+        This endpoint is typically called after receiving a completion event from /api/exports/stream.
+      operationId: downloadExport
+      tags:
+        - Exports
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          description: Unique file identifier from export completion
+          schema:
+            type: string
+            example: "abc123def456"
+      responses:
+        '200':
+          description: File download successful
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="large_export_20251225_143022.csv"
+            Content-Type:
+              schema:
+                type: string
+                example: text/csv; charset=utf-8
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/export-preferences:
+    get:
+      summary: Get user export preferences
+      description: Retrieve current export preferences for the authenticated user
+      operationId: getExportPreferences
+      tags:
+        - Export Preferences
+      responses:
+        '200':
+          description: User preferences retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportPreferences'
+        '404':
+          description: No preferences found (use defaults)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: Update user export preferences
+      description: Update export preferences for the authenticated user
+      operationId: updateExportPreferences
+      tags:
+        - Export Preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportPreferencesUpdate'
+      responses:
+        '200':
+          description: Preferences updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportPreferences'
+        '400':
+          description: Invalid preference values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/export-history:
+    get:
+      summary: Get user export history
+      description: Retrieve recent export operations for the authenticated user
+      operationId: getExportHistory
+      tags:
+        - Export History
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of history entries to return
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: status
+          in: query
+          description: Filter by export status
+          schema:
+            type: string
+            enum: [success, failed, cancelled]
+      responses:
+        '200':
+          description: Export history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExportHistoryEntry'
+                  total:
+                    type: integer
+                    description: Total number of export history entries
+
+components:
+  schemas:
+    ExportRequest:
+      type: object
+      description: Request payload for export operations
+      properties:
+        query_history_id:
+          type: integer
+          description: ID of query history to export (mutually exclusive with query_result)
+          example: 42
+        query_result:
+          type: object
+          description: In-memory query result to export (mutually exclusive with query_history_id)
+          properties:
+            columns:
+              type: array
+              items:
+                type: string
+              example: ["id", "email", "created_at"]
+            rows:
+              type: array
+              items:
+                type: object
+              example:
+                - {"id": 1, "email": "alice@example.com"}
+                - {"id": 2, "email": "bob@example.com"}
+        format:
+          type: string
+          enum: [csv, json]
+          description: Export file format
+          example: csv
+        options:
+          type: object
+          description: Format-specific export options
+          properties:
+            pretty:
+              type: boolean
+              description: Pretty-print JSON with indentation (JSON only)
+              default: false
+            include_bom:
+              type: boolean
+              description: Include UTF-8 BOM for Excel compatibility (CSV only)
+              default: false
+            include_metadata:
+              type: boolean
+              description: Include query metadata in export
+              default: false
+        filename:
+          type: string
+          description: Custom filename prefix (will be sanitized and timestamped)
+          example: sales_report
+      required:
+        - format
+      oneOf:
+        - required: [query_history_id]
+        - required: [query_result]
+
+    ExportResponseStreaming:
+      type: object
+      description: Response for large export operations (streaming mode)
+      properties:
+        status:
+          type: string
+          enum: [streaming]
+          example: streaming
+        stream_url:
+          type: string
+          description: SSE URL for progress updates
+          example: /api/exports/stream/abc123def456
+        export_id:
+          type: string
+          description: Unique export operation identifier
+          example: abc123def456
+        filename:
+          type: string
+          description: Generated filename
+          example: query_results_20251225_143022.csv
+        row_count:
+          type: integer
+          description: Total number of rows to export
+          example: 150000
+        format:
+          type: string
+          enum: [csv, json]
+          example: csv
+      required:
+        - status
+        - stream_url
+        - export_id
+        - filename
+        - row_count
+        - format
+
+    ExportPreferences:
+      type: object
+      description: User export preferences
+      properties:
+        user_id:
+          type: integer
+          example: 1
+        default_format:
+          type: string
+          enum: [csv, json]
+          default: csv
+          example: csv
+        include_metadata:
+          type: boolean
+          default: false
+          example: false
+        pretty_json:
+          type: boolean
+          default: false
+          example: false
+        csv_include_bom:
+          type: boolean
+          default: false
+          example: false
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-12-25T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-12-25T14:30:00Z"
+
+    ExportPreferencesUpdate:
+      type: object
+      description: Payload for updating export preferences
+      properties:
+        default_format:
+          type: string
+          enum: [csv, json]
+        include_metadata:
+          type: boolean
+        pretty_json:
+          type: boolean
+        csv_include_bom:
+          type: boolean
+
+    ExportHistoryEntry:
+      type: object
+      description: Single export history entry
+      properties:
+        id:
+          type: integer
+          example: 123
+        query_history_id:
+          type: integer
+          nullable: true
+          example: 42
+        format:
+          type: string
+          enum: [csv, json]
+          example: csv
+        row_count:
+          type: integer
+          example: 1500
+        file_size_bytes:
+          type: integer
+          nullable: true
+          example: 153600
+        status:
+          type: string
+          enum: [success, failed, cancelled]
+          example: success
+        error_message:
+          type: string
+          nullable: true
+          example: null
+        execution_time_ms:
+          type: integer
+          nullable: true
+          example: 2340
+        exported_at:
+          type: string
+          format: date-time
+          example: "2025-12-25T14:30:22Z"
+        filename:
+          type: string
+          example: query_results_20251225_143022.csv
+
+    ErrorResponse:
+      type: object
+      description: Error response
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: Invalid export format
+        code:
+          type: string
+          description: Machine-readable error code
+          example: INVALID_FORMAT
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+      required:
+        - error
